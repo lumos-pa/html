@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>心形消息生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .tip-window {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 15px;
+            min-width: 120px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.5s ease-in-out;
+            animation: fadeIn 0.5s ease-out;
+            cursor: pointer;
+            border: 2px solid transparent;
+            color: #333;
+        }
+        
+        .tip-window:hover {
+            transform: scale(1.05);
+            border-color: rgba(255,255,255,0.5);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .heart-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .popup-message {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 10px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 999;
+            animation: popInOut 3s ease-in-out forwards;
+            pointer-events: none;
+            text-align: center;
+            max-width: 150px;
+        }
+        
+        @keyframes popInOut {
+            0% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+            30% {
+                transform: scale(1);
+            }
+            70% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas class="heart-canvas" id="heartCanvas"></canvas>
+
+    <script>
+        // 默认参数
+        const DEFAULT_POINTS = 100;      // 消息数量
+        const DEFAULT_DURATION = 5;      // 显示时间（秒）
+        const DEFAULT_WIDTH = 120;       // 窗口宽度
+        const DEFAULT_HEIGHT = 60;       // 窗口高度
+        const DEFAULT_DELAY = 120;       // 显示延迟（毫秒）
+        const POPUP_DELAY = 300;         // 弹出消息间隔（毫秒）
+
+        // 提示消息库
+        const tips = [
+            "保持好心情", "我想你了", "保持微笑", 
+            "天天都要元气满满", "别熬夜", "记得吃水果", 
+            "好好吃饭", "多喝水", "每天都要开心", 
+            "保持你的纯真", "你的微笑很特别", "要一直幸福哦", 
+            "想你的每一天", "照顾好自己", "记得想我!",
+            "今天也要加油哦", "你是最棒的", "保持乐观",
+            "一切都会好起来的", "相信自己", "微笑面对生活",
+            "保持耐心", "坚持就是胜利", "放松一下",
+            "享受当下", "感恩每一天", "保持好奇心",
+            "追逐梦想", "永不放弃", "保持热情"
+        ];
+
+        // 生成随机颜色
+        function getRandomColor() {
+            const r = Math.floor(Math.random() * 56) + 200; // 200-255
+            const g = Math.floor(Math.random() * 56) + 200;
+            const b = Math.floor(Math.random() * 56) + 200;
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        // 生成心形轨迹点
+        function generateHeartPoints(numPoints, screenWidth, screenHeight, windowWidth, windowHeight) {
+            const points = [];
+            const centerX = screenWidth / 2;
+            const centerY = screenHeight / 2;
+            
+            for (let i = 0; i < numPoints; i++) {
+                const t = i / numPoints * 2 * Math.PI;
+                // 心形参数方程
+                const x = 16 * Math.pow(Math.sin(t), 3);
+                const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                
+                // 缩放和平移
+                const scale = Math.min(screenWidth / 40, screenHeight / 40);
+                let pointX = centerX + x * scale;
+                let pointY = centerY - y * scale; // 注意：网页Y轴向下，所以取负
+                
+                // 确保窗口在屏幕内
+                pointX = Math.max(windowWidth / 2, Math.min(pointX, screenWidth - windowWidth / 2));
+                pointY = Math.max(windowHeight / 2, Math.min(pointY, screenHeight - windowHeight / 2));
+                
+                points.push({ x: Math.round(pointX), y: Math.round(pointY) });
+            }
+            
+            return points;
+        }
+
+        // 绘制心形轨迹
+        function drawHeartTrajectory(points) {
+            const canvas = document.getElementById('heartCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 设置canvas尺寸为全屏
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (points.length === 0) return;
+            
+            // 绘制心形轨迹
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // 创建提示窗口
+        function createTipWindow(x, y, width, height, duration) {
+            const tipText = tips[Math.floor(Math.random() * tips.length)];
+            const backgroundColor = getRandomColor();
+            
+            // 创建提示窗口元素
+            const tipElement = document.createElement('div');
+            tipElement.className = 'tip-window';
+            tipElement.textContent = tipText;
+            tipElement.style.left = (x - width/2) + 'px';
+            tipElement.style.top = (y - height/2) + 'px';
+            tipElement.style.width = width + 'px';
+            tipElement.style.minHeight = height + 'px';
+            tipElement.style.background = backgroundColor;
+            
+            // 添加到页面
+            document.body.appendChild(tipElement);
+            
+            // 点击关闭功能
+            tipElement.addEventListener('click', function() {
+                this.remove();
+            });
+            
+            // 自动关闭定时器
+            const closeTimer = setTimeout(() => {
+                if (tipElement.parentNode) {
+                    tipElement.style.opacity = '0';
+                    tipElement.style.transform = 'scale(0.5)';
+                    setTimeout(() => {
+                        if (tipElement.parentNode) {
+                            tipElement.remove();
+                        }
+                    }, 500);
+                }
+            }, duration * 1000);
+            
+            return { element: tipElement, timer: closeTimer };
+        }
+
+        // 创建弹出消息
+        function createPopupMessage() {
+            const message = document.createElement('div');
+            message.className = 'popup-message';
+            message.textContent = tips[Math.floor(Math.random() * tips.length)];
+            
+            // 随机位置，确保在屏幕内
+            const maxX = window.innerWidth - 150;
+            const maxY = window.innerHeight - 60;
+            const x = Math.max(20, Math.min(maxX, Math.random() * maxX));
+            const y = Math.max(20, Math.min(maxY, Math.random() * maxY));
+            
+            message.style.left = x + 'px';
+            message.style.top = y + 'px';
+            message.style.background = getRandomColor();
+            
+            document.body.appendChild(message);
+            
+            // 动画结束后移除元素
+            setTimeout(() => {
+                if (message.parentNode) {
+                    message.remove();
+                }
+            }, 3000);
+        }
+
+        // 主函数 - 开始显示心形提示
+        function startHeartTips() {
+            // 使用默认参数
+            const numPoints = DEFAULT_POINTS;
+            const duration = DEFAULT_DURATION;
+            const width = DEFAULT_WIDTH;
+            const height = DEFAULT_HEIGHT;
+            const delay = DEFAULT_DELAY;
+            
+            // 获取屏幕尺寸
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            
+            // 生成心形点
+            const points = generateHeartPoints(numPoints, screenWidth, screenHeight, width, height);
+            
+            // 绘制心形轨迹
+            drawHeartTrajectory(points);
+            
+            // 存储所有提示窗口的引用
+            const allTips = [];
+            let currentIndex = 0;
+            
+            // 计算心形轨迹消失前2秒的时间点
+            const heartDisplayTime = (numPoints * delay) + (duration * 1000);
+            const popupStartTime = heartDisplayTime - 5000; // 消失前2秒
+            
+            // 设置弹出消息定时器
+            setTimeout(() => {
+                // 开始弹出消息，间隔0.3秒
+                window.popupInterval = setInterval(createPopupMessage, POPUP_DELAY);
+            }, popupStartTime);
+            
+            // 逐个显示提示窗口
+            function showNextTip() {
+                if (currentIndex >= points.length) {
+                    // 所有心形消息显示完成
+                    return;
+                }
+                
+                const point = points[currentIndex];
+                const tip = createTipWindow(point.x, point.y, width, height, duration);
+                allTips.push(tip);
+                
+                currentIndex++;
+                
+                if (currentIndex < points.length) {
+                    setTimeout(showNextTip, delay);
+                }
+            }
+            
+            // 开始显示
+            showNextTip();
+            
+            // 存储allTips以便清除功能使用
+            window.currentTips = allTips;
+        }
+
+        // 页面加载完成后自动开始
+        document.addEventListener('DOMContentLoaded', function() {
+            // 延迟一下，让页面先完全加载
+            setTimeout(startHeartTips, 500);
+            
+            // 窗口大小变化时重绘心形轨迹
+            window.addEventListener('resize', function() {
+                if (window.currentTips && window.currentTips.length > 0) {
+                    const numPoints = DEFAULT_POINTS;
+                    const width = DEFAULT_WIDTH;
+                    const height = DEFAULT_HEIGHT;
+                    
+                    const screenWidth = window.innerWidth;
+                    const screenHeight = window.innerHeight;
+                    const points = generateHeartPoints(numPoints, screenWidth, screenHeight, width, height);
+                    
+                    const canvas = document.getElementById('heartCanvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = screenWidth;
+                    canvas.height = screenHeight;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    drawHeartTrajectory(points);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
